@@ -244,10 +244,13 @@ const FriendRequests = () => {
               {receivedRequests.map(request => (
                 <HStack key={request._id} justify="space-between">
                   <HStack>
-                    <Avatar name={request.sender.name} src={request.sender.profilePicture} />
+                    <Avatar 
+                      name={request.sender?.name || 'Unknown User'} 
+                      src={request.sender?.profilePicture} 
+                    />
                     <Box>
-                      <Text fontWeight="medium">{request.sender.name}</Text>
-                      <Text fontSize="sm" color="gray.500">{request.sender.email}</Text>
+                      <Text fontWeight="medium">{request.sender?.name || 'Unknown User'}</Text>
+                      <Text fontSize="sm" color="gray.500">{request.sender?.email || 'No email'}</Text>
                     </Box>
                   </HStack>
                   <HStack>
@@ -283,10 +286,13 @@ const FriendRequests = () => {
               {sentRequests.map(request => (
                 <HStack key={request._id} justify="space-between">
                   <HStack>
-                    <Avatar name={request.recipient.name} src={request.recipient.profilePicture} />
+                    <Avatar 
+                      name={request.recipient?.name || 'Unknown User'} 
+                      src={request.recipient?.profilePicture} 
+                    />
                     <Box>
-                      <Text fontWeight="medium">{request.recipient.name}</Text>
-                      <Text fontSize="sm" color="gray.500">{request.recipient.email}</Text>
+                      <Text fontWeight="medium">{request.recipient?.name || 'Unknown User'}</Text>
+                      <Text fontSize="sm" color="gray.500">{request.recipient?.email || 'No email'}</Text>
                     </Box>
                   </HStack>
                   <Badge>{request.status}</Badge>
@@ -304,10 +310,13 @@ const FriendRequests = () => {
               {friends.map(friend => (
                 <HStack key={friend._id} justify="space-between">
                   <HStack>
-                    <Avatar name={friend.name} src={friend.profilePicture} />
+                    <Avatar 
+                      name={friend?.name || 'Unknown User'} 
+                      src={friend?.profilePicture} 
+                    />
                     <Box>
-                      <Text fontWeight="medium">{friend.name}</Text>
-                      <Text fontSize="sm" color="gray.500">{friend.email}</Text>
+                      <Text fontWeight="medium">{friend?.name || 'Unknown User'}</Text>
+                      <Text fontSize="sm" color="gray.500">{friend?.email || 'No email'}</Text>
                     </Box>
                   </HStack>
                   <HStack spacing={2}>

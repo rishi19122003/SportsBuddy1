@@ -1,6 +1,8 @@
 import CricketProfile from '../models/CricketProfile.js';
 import { findBestMatches } from '../utils/collaborativeFiltering.js';
 import { getUserInteractionsForRecommendation } from '../controllers/interactionController.js';
+import { createActivity } from './activityController.js';
+import CricketMatch from '../models/CricketMatch.js';
 
 // @desc    Create or update cricket profile
 // @route   POST /api/cricket/profile
@@ -51,6 +53,14 @@ export const createUpdateCricketProfile = async (req, res) => {
         availability
       });
     }
+
+    // Track profile update activity
+    await createActivity(
+      req.user._id,
+      'profile',
+      'Updated cricket profile',
+      `Updated cricket preferences and skills`
+    );
 
     res.status(200).json(profile);
   } catch (error) {
@@ -209,6 +219,26 @@ export const searchCricketPartners = async (req, res) => {
     // Debug log
     console.log('Nearby profiles found:', nearbyProfiles.length);
 
+    // Assign submitted preferences to userProfile.partnerPreferences for matching
+    userProfile.partnerPreferences = {
+      minBattingSkill: preferences.minBattingSkill,
+      maxBattingSkill: preferences.maxBattingSkill,
+      minBowlingSkill: preferences.minBowlingSkill,
+      maxBowlingSkill: preferences.maxBowlingSkill,
+      minFieldingSkill: preferences.minFieldingSkill,
+      maxFieldingSkill: preferences.maxFieldingSkill,
+      preferredBattingStyles: preferences.preferredBattingStyles,
+      preferredBowlingStyles: preferences.preferredBowlingStyles,
+      preferredPositions: preferences.preferredPositions,
+      preferredAvailability: {
+        weekdays: preferences.weekdays,
+        weekends: preferences.weekends,
+        preferred_time: preferences.preferredTime
+      },
+      complementarySkills: preferences.complementarySkills || false,
+      maxDistance: preferences.maxDistance
+    };
+
     // Get user interactions for collaborative filtering
     const userInteractions = await getUserInteractionsForRecommendation(req.user._id);
     
@@ -236,6 +266,14 @@ export const searchCricketPartners = async (req, res) => {
       };
     });
 
+    // Track search activity
+    await createActivity(
+      req.user._id,
+      'search',
+      'Searched for cricket partners',
+      `Looking for partners with similar preferences in ${preferences.location || 'any location'}`,
+    );
+
     res.status(200).json({
       message: 'Partners found',
       count: formattedPartners.length,
@@ -243,6 +281,41 @@ export const searchCricketPartners = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+}; 
+
+// @desc    Join a cricket match
+// @route   POST /api/cricket/matches/join
+// @access  Private
+export const joinCricketMatch = async (req, res) => {
+  try {
+    const { matchId } = req.body;
+    const match = await CricketMatch.findById(matchId).populate('organizer', 'name');
+    
+    if (!match) {
+      return res.status(404).json({ message: 'Match not found' });
+    }
+
+    // Add user to match participants
+    if (!match.participants.includes(req.user._id)) {
+      match.participants.push(req.user._id);
+      await match.save();
+    }
+
+    // Track join activity
+    await createActivity(
+      req.user._id,
+      'match',
+      'Joined cricket match',
+      `Joined ${match.organizer.name}'s match: ${match.title}`,
+      [match.organizer._id],
+      match._id
+    );
+
+    res.json({ message: 'Successfully joined the match', match });
+  } catch (error) {
+    console.error('Error joining match:', error);
     res.status(500).json({ message: 'Server error' });
   }
 }; 

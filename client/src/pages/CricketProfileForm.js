@@ -24,15 +24,23 @@ import {
   Container,
   Input,
   Divider,
+  InputGroup,
+  InputRightElement,
+  List,
+  ListItem,
 } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../hooks/useAuth';
+import { GoogleMap, LoadScript, Autocomplete } from '@react-google-maps/api';
 
 const CricketProfileForm = () => {
   const { user } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -44,7 +52,7 @@ const CricketProfileForm = () => {
     preferredPosition: '',
     location: {
       type: 'Point',
-      coordinates: [0, 0], // [longitude, latitude]
+      coordinates: [0, 0],
       address: ''
     },
     availability: {
@@ -57,75 +65,89 @@ const CricketProfileForm = () => {
   const [loading, setLoading] = useState(false);
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [existingProfile, setExistingProfile] = useState(null);
+  const [autocomplete, setAutocomplete] = useState(null);
+  const [map, setMap] = useState(null);
 
-  // Load existing profile if available
-  useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const config = {
-          headers: {
-            Authorization: `Bearer ${user.token}`
-          }
+  // Location search function using Google Places API
+  const onLoad = (autocomplete) => {
+    setAutocomplete(autocomplete);
+  };
+
+  const onPlaceChanged = () => {
+    if (autocomplete) {
+      const place = autocomplete.getPlace();
+      
+      if (place.geometry) {
+        const location = {
+          type: 'Point',
+          coordinates: [
+            place.geometry.location.lng(),
+            place.geometry.location.lat()
+          ],
+          address: place.formatted_address
         };
-        
-        const { data } = await axios.get('/api/cricket/profile', config);
-        setExistingProfile(data);
-        setFormData({
-          battingSkill: data.battingSkill,
-          bowlingSkill: data.bowlingSkill,
-          fieldingSkill: data.fieldingSkill,
-          battingStyle: data.battingStyle,
-          bowlingStyle: data.bowlingStyle,
-          preferredPosition: data.preferredPosition,
-          location: data.location,
-          availability: data.availability
+
+        setFormData(prev => ({
+          ...prev,
+          location
+        }));
+        setSearchTerm(place.formatted_address);
+
+        toast({
+          title: 'Location selected',
+          description: `Selected location: ${place.formatted_address}`,
+          status: 'success',
+          duration: 3000,
+          isClosable: true
         });
-      } catch (error) {
-        if (error.response?.status !== 404) {
-          console.error('Error fetching profile:', error);
-        }
       }
-    };
-
-    if (user) {
-      fetchProfile();
     }
-  }, [user]);
+  };
 
-  // Get current location
+  // Get current location using Google's Geocoding API
   const getCurrentLocation = () => {
     setLoadingLocation(true);
     
     if (navigator.geolocation) {
+      const geoOptions = {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      };
+
       navigator.geolocation.getCurrentPosition(
         async (position) => {
           try {
-            // Reverse geocoding to get address from coordinates
             const { latitude, longitude } = position.coords;
             
-            // Using Open Street Map Nominatim API for geocoding (free)
+            // Use Google's Geocoding API for reverse geocoding
             const response = await axios.get(
-              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+              `https://maps.googleapis.com/maps/api/geocode/json?` +
+              `latlng=${latitude},${longitude}&key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}`
             );
             
-            const address = response.data.display_name;
-            
-            setFormData({
-              ...formData,
-              location: {
-                type: 'Point',
-                coordinates: [longitude, latitude],
-                address
-              }
-            });
-            
-            toast({
-              title: 'Location detected',
-              description: `Your location: ${address}`,
-              status: 'success',
-              duration: 3000,
-              isClosable: true
-            });
+            if (response.data.results && response.data.results.length > 0) {
+              const result = response.data.results[0];
+              const address = result.formatted_address;
+              
+              setFormData(prev => ({
+                ...prev,
+                location: {
+                  type: 'Point',
+                  coordinates: [longitude, latitude],
+                  address: address
+                }
+              }));
+              setSearchTerm(address);
+              
+              toast({
+                title: 'Location detected',
+                description: `Location: ${address}`,
+                status: 'success',
+                duration: 3000,
+                isClosable: true
+              });
+            }
           } catch (error) {
             console.error('Error getting location address:', error);
             toast({
@@ -135,30 +157,38 @@ const CricketProfileForm = () => {
               duration: 3000,
               isClosable: true
             });
-            
-            // Still update coordinates
-            setFormData({
-              ...formData,
-              location: {
-                ...formData.location,
-                coordinates: [position.coords.longitude, position.coords.latitude]
-              }
-            });
           } finally {
             setLoadingLocation(false);
           }
         },
         (error) => {
           console.error('Geolocation error:', error);
+          let errorMessage = 'Unable to get your location. ';
+          
+          switch(error.code) {
+            case error.PERMISSION_DENIED:
+              errorMessage += 'Please enable location services in your browser.';
+              break;
+            case error.POSITION_UNAVAILABLE:
+              errorMessage += 'Location information is unavailable.';
+              break;
+            case error.TIMEOUT:
+              errorMessage += 'Location request timed out.';
+              break;
+            default:
+              errorMessage += 'Please try again or enter location manually.';
+          }
+          
           toast({
             title: 'Location error',
-            description: 'Unable to get your location. Please enable location services.',
+            description: errorMessage,
             status: 'error',
-            duration: 3000,
+            duration: 5000,
             isClosable: true
           });
           setLoadingLocation(false);
-        }
+        },
+        geoOptions
       );
     } else {
       toast({
@@ -176,22 +206,25 @@ const CricketProfileForm = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Form validation
-    if (!formData.battingStyle || !formData.bowlingStyle || !formData.preferredPosition) {
+    // Validate location
+    if (!formData.location.coordinates || 
+        formData.location.coordinates[0] === 0 || 
+        formData.location.coordinates[1] === 0) {
       toast({
-        title: 'Error',
-        description: 'Please fill in all required fields',
+        title: 'Location required',
+        description: 'Please select a location from the suggestions or use detect location',
         status: 'error',
-        duration: 3000,
+        duration: 5000,
         isClosable: true
       });
       return;
     }
     
-    if (formData.location.address === '') {
+    // Form validation
+    if (!formData.battingStyle || !formData.bowlingStyle || !formData.preferredPosition) {
       toast({
         title: 'Error',
-        description: 'Please provide your location',
+        description: 'Please fill in all required fields',
         status: 'error',
         duration: 3000,
         isClosable: true
@@ -243,16 +276,6 @@ const CricketProfileForm = () => {
     setFormData({ ...formData, [name]: value });
   };
 
-  const handleAddressChange = (e) => {
-    setFormData({
-      ...formData,
-      location: {
-        ...formData.location,
-        address: e.target.value
-      }
-    });
-  };
-
   const handleAvailabilityChange = (field, value) => {
     setFormData({
       ...formData,
@@ -268,10 +291,10 @@ const CricketProfileForm = () => {
       <Container maxW={'container.md'} py={10}>
         <VStack spacing={8} align="stretch">
           <Heading as="h1" size="xl" textAlign="center">
-            User Profile
+            Cricket Profile
           </Heading>
           <Text fontSize="lg" textAlign="center" color="gray.600">
-            Complete your user profile. This information will be used by others to find you as a cricket partner.
+            Complete your cricket profile. This information will be used to find suitable playing partners.
           </Text>
 
           <Box
@@ -282,6 +305,48 @@ const CricketProfileForm = () => {
             shadow="md"
             p={8}
           >
+            {/* Location Section */}
+            <VStack spacing={6} align="stretch" mb={8}>
+              <Heading as="h2" size="md">
+                Location
+              </Heading>
+
+              <FormControl isRequired>
+                <FormLabel>Your Location</FormLabel>
+                <LoadScript
+                  googleMapsApiKey={process.env.REACT_APP_GOOGLE_MAPS_API_KEY}
+                  libraries={['places']}
+                >
+                  <Autocomplete
+                    onLoad={onLoad}
+                    onPlaceChanged={onPlaceChanged}
+                    restrictions={{ country: 'in' }}
+                  >
+                  <InputGroup>
+                    <Input
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder="Search for your location in India"
+                    />
+                    <InputRightElement width="4.5rem">
+                      <Button
+                        h="1.75rem"
+                        size="sm"
+                        onClick={getCurrentLocation}
+                        isLoading={loadingLocation}
+                      >
+                        Detect
+                      </Button>
+                    </InputRightElement>
+                  </InputGroup>
+                  </Autocomplete>
+                </LoadScript>
+                <FormHelperText>
+                  Enter your location to find partners in your area
+                </FormHelperText>
+              </FormControl>
+            </VStack>
+
             {/* Skill Ratings */}
             <VStack spacing={8} align="stretch" mb={8}>
               <Heading as="h2" size="md">
@@ -400,40 +465,6 @@ const CricketProfileForm = () => {
                   <option value="All-rounder">All-rounder</option>
                   <option value="Wicket-keeper">Wicket-keeper</option>
                 </Select>
-              </FormControl>
-            </VStack>
-
-            <Divider my={6} />
-
-            {/* Location */}
-            <VStack spacing={6} align="stretch" mb={8}>
-              <Heading as="h2" size="md">
-                Location
-              </Heading>
-
-              <FormControl isRequired>
-                <FormLabel>Your Location</FormLabel>
-                <Flex>
-                  <Input
-                    value={formData.location.address}
-                    onChange={handleAddressChange}
-                    placeholder="Your location"
-                    mr={2}
-                  />
-                  <Button
-                    onClick={getCurrentLocation}
-                    colorScheme="blue"
-                    isLoading={loadingLocation}
-                    loadingText="Detecting"
-                    size="md"
-                    width="auto"
-                  >
-                    Detect
-                  </Button>
-                </Flex>
-                <FormHelperText>
-                  We use your location to find players near you.
-                </FormHelperText>
               </FormControl>
             </VStack>
 

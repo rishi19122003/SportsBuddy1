@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Flex,
@@ -16,13 +16,16 @@ import {
   SimpleGrid,
   Icon,
   Divider,
+  Center,
+  Spinner,
 } from '@chakra-ui/react';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import SportsBuddyLogo from '../assets/sportsBuddyLogo';
-import { FiUsers, FiUser, FiCalendar, FiMapPin, FiMessageSquare, FiActivity } from 'react-icons/fi';
+import { FiUsers, FiUser, FiCalendar, FiMapPin, FiMessageSquare, FiActivity, FiSearch, FiEdit } from 'react-icons/fi';
 import { GiCricketBat, GiSoccerBall, GiTennisRacket } from 'react-icons/gi';
 import { MdSportsCricket } from 'react-icons/md';
+import axios from 'axios';
 
 const FeatureCard = ({ icon, title, description, buttonText, onClick }) => {
   return (
@@ -57,6 +60,57 @@ const FeatureCard = ({ icon, title, description, buttonText, onClick }) => {
 };
 
 const RecentActivityCard = ({ activity }) => {
+  const [timeString, setTimeString] = useState('');
+
+  useEffect(() => {
+    const updateTime = () => {
+      const seconds = Math.floor((new Date() - new Date(activity.timestamp)) / 1000);
+      let interval = seconds / 31536000;
+      if (interval > 1) setTimeString(Math.floor(interval) + ' years ago');
+      else {
+        interval = seconds / 2592000;
+        if (interval > 1) setTimeString(Math.floor(interval) + ' months ago');
+        else {
+          interval = seconds / 86400;
+          if (interval > 1) setTimeString(Math.floor(interval) + ' days ago');
+          else {
+            interval = seconds / 3600;
+            if (interval > 1) setTimeString(Math.floor(interval) + ' hours ago');
+            else {
+              interval = seconds / 60;
+              if (interval > 1) setTimeString(Math.floor(interval) + ' minutes ago');
+              else setTimeString(Math.floor(seconds) + ' seconds ago');
+            }
+          }
+        }
+      }
+    };
+
+    updateTime();
+    const timer = setInterval(updateTime, 1000);
+    return () => clearInterval(timer);
+  }, [activity.timestamp]);
+
+  const getActivityIcon = (type) => {
+    switch (type) {
+      case 'join': return <Icon as={FiUser} color="green.500" />;
+      case 'match': return <Icon as={FiCalendar} color="blue.500" />;
+      case 'search': return <Icon as={FiSearch} color="purple.500" />;
+      case 'profile': return <Icon as={FiEdit} color="orange.500" />;
+      default: return <Icon as={FiActivity} color="gray.500" />;
+    }
+  };
+
+  const getActivityColor = (type) => {
+    switch (type) {
+      case 'join': return 'green';
+      case 'match': return 'blue';
+      case 'search': return 'purple';
+      case 'profile': return 'orange';
+      default: return 'gray';
+    }
+  };
+
   return (
     <Box
       p={4}
@@ -64,18 +118,38 @@ const RecentActivityCard = ({ activity }) => {
       borderRadius="md"
       mb={3}
       bg={useColorModeValue('white', 'gray.700')}
+      _hover={{ transform: 'translateY(-2px)', shadow: 'md' }}
+      transition="all 0.2s"
     >
       <Flex align="center">
-        <Avatar size="sm" name={activity.name} src={activity.avatar} mr={3} />
+        <Avatar 
+          size="sm" 
+          name={activity.user?.name || 'User'} 
+          src={activity.user?.profilePicture} 
+          mr={3} 
+        />
         <Box flex="1">
-          <Text fontWeight="bold">{activity.name}</Text>
+          <HStack>
+            <Text fontWeight="bold">{activity.user?.name || 'User'}</Text>
+            {getActivityIcon(activity.type)}
+          </HStack>
           <Text fontSize="sm" color="gray.600">
             {activity.action}
           </Text>
+          {activity.details && (
+            <Text fontSize="xs" color="gray.500" mt={1}>
+              {activity.details}
+            </Text>
+          )}
         </Box>
+        <VStack align="end" spacing={1}>
+          <Badge colorScheme={getActivityColor(activity.type)} fontSize="xs">
+            {activity.type}
+          </Badge>
         <Text fontSize="xs" color="gray.500">
-          {activity.time}
+            {timeString}
         </Text>
+        </VStack>
       </Flex>
     </Box>
   );
@@ -105,33 +179,37 @@ const PopularSportCard = ({ icon, sport, count }) => {
 const Dashboard = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [recentActivities, setRecentActivities] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchRecentActivities = async () => {
+    try {
+      const config = {
+        headers: {
+          Authorization: `Bearer ${user.token}`
+        }
+      };
+      const { data } = await axios.get('/api/activities/recent', config);
+      setRecentActivities(data);
+    } catch (error) {
+      console.error('Error fetching recent activities:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRecentActivities();
+    // Set up polling for real-time updates
+    const interval = setInterval(fetchRecentActivities, 5000); // Poll every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [user.token]);
 
   const handleLogout = () => {
     logout();
     navigate('/login');
   };
-
-  // Mock recent activities
-  const recentActivities = [
-    {
-      name: 'Rahul Sharma',
-      avatar: '',
-      action: 'joined as a cricket player',
-      time: '2h ago',
-    },
-    {
-      name: 'Priya Singh',
-      avatar: '',
-      action: 'is looking for tennis partners',
-      time: '5h ago',
-    },
-    {
-      name: 'Amit Kumar',
-      avatar: '',
-      action: 'created a football match event',
-      time: '1d ago',
-    },
-  ];
 
   // Mock popular sports
   const popularSports = [
@@ -212,10 +290,17 @@ const Dashboard = () => {
                 />
                 <FeatureCard
                   icon={FiCalendar}
-                  title="Create Match"
-                  description="Schedule a match and invite players in your area to join."
-                  buttonText="Schedule Match"
-                  onClick={() => navigate('/dashboard')}
+                  title="Cricket Matches"
+                  description="View scheduled matches or create a new cricket match."
+                  buttonText="View Matches"
+                  onClick={() => navigate('/matches')}
+                />
+                <FeatureCard
+                  icon={FiUsers}
+                  title="Sports Community"
+                  description="Join sports clubs, participate in discussions, share tips, and watch training videos from the community."
+                  buttonText="Join Community"
+                  onClick={() => navigate('/community')}
                 />
                 <FeatureCard
                   icon={FiMessageSquare}
@@ -336,14 +421,33 @@ const Dashboard = () => {
                 shadow="base"
                 borderWidth="1px"
               >
-                <Heading size="md" mb={4}>
-                  Recent Activity
-                </Heading>
+                <HStack justify="space-between" mb={4}>
+                  <Heading size="md">Last 3 Activities</Heading>
+                  <Button
+                    size="sm"
+                    colorScheme="teal"
+                    variant="ghost"
+                    onClick={() => setRecentActivities([])}
+                  >
+                    Clear All
+                  </Button>
+                </HStack>
+                {loading ? (
+                  <Center p={4}>
+                    <Spinner />
+                  </Center>
+                ) : recentActivities.length > 0 ? (
                 <VStack spacing={3} align="stretch">
                   {recentActivities.map((activity, index) => (
-                    <RecentActivityCard key={index} activity={activity} />
+                      <RecentActivityCard 
+                        key={activity._id || index} 
+                        activity={activity}
+                      />
                   ))}
                 </VStack>
+                ) : (
+                  <Text color="gray.500" textAlign="center">No recent activity</Text>
+                )}
               </Box>
 
               {/* Popular Sports */}

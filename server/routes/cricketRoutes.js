@@ -6,28 +6,28 @@ import {
   searchCricketPartners 
 } from '../controllers/cricketController.js';
 import { protect } from '../middleware/authMiddleware.js';
+import {
+  createMatch,
+  getMatches,
+  getMatch,
+  joinMatch
+} from '../controllers/cricketMatchController.js';
 
 const router = express.Router();
 
-// All routes are protected
+// Cricket profile routes
 router.route('/profile')
   .post(protect, createUpdateCricketProfile)
   .get(protect, getCricketProfile);
 
+// Cricket partners routes
 router.get('/partners', protect, findCricketPartners);
-
 router.post('/partners/search', protect, searchCricketPartners);
 
-// Placeholder route for cricket profiles
-router.get('/profile', (req, res) => {
-  res.status(404).json({ message: 'Cricket profile not found' });
-});
-
-// Placeholder route for cricket partners
-router.get('/partners', (req, res) => {
-  res.status(200).json({ 
-    partners: [] 
-  });
-});
+// Cricket matches routes
+router.post('/matches', protect, createMatch);
+router.get('/matches', protect, getMatches);
+router.get('/matches/:id', protect, getMatch);
+router.post('/matches/:id/join', protect, joinMatch);
 
 export default router; 

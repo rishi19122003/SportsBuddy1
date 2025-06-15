@@ -13,9 +13,12 @@ import FindPartners from './pages/FindPartners';
 import Chat from './pages/Chat';
 import Messages from './pages/Messages';
 import FriendRequests from './pages/FriendRequests';
+import CricketMatches from './pages/CricketMatches';
+import Community from './pages/Community';
 
 // Components
 import PrivateRoute from './components/PrivateRoute';
+import CricketMatch from './components/CricketMatch';
 
 // Context
 import { AuthProvider } from './context/AuthContext';
@@ -56,13 +59,30 @@ function App() {
               <Route path="/chat" element={<Chat />} />
               <Route path="/messages" element={<Messages />} />
               <Route path="/friend-requests" element={<FriendRequests />} />
+              <Route path="/create-cricket-match" element={<CricketMatch />} />
+              <Route path="/matches" element={<CricketMatches />} />
+              <Route path="/community" element={<Community />} />
             </Route>
             
             {/* Redirect root to dashboard if authenticated, otherwise to login */}
-            <Route path="/" element={<Navigate to="/dashboard" />} />
+            <Route 
+              path="/" 
+              element={
+                <PrivateRoute>
+                  <Navigate to="/dashboard" replace />
+                </PrivateRoute>
+              } 
+            />
             
             {/* Catch all - redirect to dashboard if authenticated, otherwise to login */}
-            <Route path="*" element={<Navigate to="/dashboard" />} />
+            <Route 
+              path="*" 
+              element={
+                <PrivateRoute>
+                  <Navigate to="/dashboard" replace />
+                </PrivateRoute>
+              } 
+            />
           </Routes>
         </Router>
       </AuthProvider>

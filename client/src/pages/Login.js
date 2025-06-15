@@ -16,7 +16,7 @@ import {
   Container
 } from '@chakra-ui/react';
 import { ViewIcon, ViewOffIcon } from '@chakra-ui/icons';
-import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import SportsBuddyLogo from '../assets/sportsBuddyLogo';
 
@@ -24,60 +24,39 @@ const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   
-  const { login, error } = useAuth();
+  const { login } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if (!email || !password) {
-      toast({
-        title: 'Error',
-        description: 'Please fill in all fields',
-        status: 'error',
-        duration: 3000,
-        isClosable: true,
-      });
-      return;
-    }
-    
-    setIsSubmitting(true);
+    setIsLoading(true);
     
     try {
-      console.log('Attempting login with email:', email);
       await login(email, password);
       
+      // Get the redirect path from location state, or default to dashboard
+      const from = location.state?.from?.pathname || '/dashboard';
+      navigate(from, { replace: true });
+      
       toast({
-        title: 'Login Successful',
-        description: 'You have been successfully logged in',
+        title: 'Login successful',
         status: 'success',
         duration: 3000,
         isClosable: true,
       });
-      
-      navigate('/dashboard');
     } catch (error) {
-      console.error('Login error:', error);
-      
-      let errorMessage = 'An error occurred during login';
-      
-      if (error.response) {
-        console.error('Error response:', error.response.data);
-        errorMessage = error.response.data.message || errorMessage;
-      }
-      
       toast({
-        title: 'Login Failed',
-        description: errorMessage,
+        title: 'Login failed',
+        description: error.response?.data?.message || 'Invalid credentials',
         status: 'error',
-        duration: 3000,
+        duration: 5000,
         isClosable: true,
       });
-    } finally {
-      setIsSubmitting(false);
+      setIsLoading(false);
     }
   };
 
@@ -141,7 +120,7 @@ const Login = () => {
                     type="submit"
                     colorScheme={'teal'}
                     size="lg"
-                    isLoading={isSubmitting}
+                    isLoading={isLoading}
                     loadingText="Signing in..."
                   >
                     Sign in

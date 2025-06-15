@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Button, FormControl, FormLabel, RangeSlider, RangeSliderTrack, RangeSliderFilledTrack, RangeSliderThumb, Slider, SliderTrack, SliderFilledTrack, SliderThumb, HStack, Checkbox, Select, VStack, Text, CheckboxGroup, Input, useToast, InputGroup, InputRightElement, List, ListItem } from '@chakra-ui/react';
+import axios from 'axios';
+import { GoogleMap, LoadScript, Autocomplete } from '@react-google-maps/api';
 
 const defaultPreferences = {
   minBattingSkill: 1,
@@ -27,78 +29,78 @@ const CricketPartnerPreferenceForm = ({ onSearch }) => {
   const [prefs, setPrefs] = useState(defaultPreferences);
   const [loadingLocation, setLoadingLocation] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [suggestions, setSuggestions] = useState([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [autocomplete, setAutocomplete] = useState(null);
   const toast = useToast();
 
-  const searchLocation = async (query) => {
-    try {
-      // Using MapMyIndia Geocoding API (which is more accurate for Indian addresses)
-      const response = await fetch(
-        `https://apis.mapmyindia.com/advancedmaps/v1/YOUR_API_KEY/geo_code?addr=${encodeURIComponent(query)}&region=IND`
-      );
-      const data = await response.json();
+  // Location search function using Google Places API
+  const onLoad = (autocomplete) => {
+    setAutocomplete(autocomplete);
+  };
+
+  const onPlaceChanged = () => {
+    if (autocomplete) {
+      const place = autocomplete.getPlace();
       
-      if (data.results && data.results.length > 0) {
-        setSuggestions(data.results.map(result => ({
-          address: result.formatted_address,
-          coordinates: [result.longitude, result.latitude]
-        })));
-        setShowSuggestions(true);
-      } else {
-        setSuggestions([]);
-        setShowSuggestions(false);
+      if (place.geometry) {
+        const location = {
+          type: 'Point',
+          coordinates: [
+            place.geometry.location.lng(),
+            place.geometry.location.lat()
+          ],
+          address: place.formatted_address,
+          useProfileLocation: false
+        };
+
+        setPrefs(p => ({
+          ...p,
+          location
+        }));
+        setSearchTerm(place.formatted_address);
+
+        toast({
+          title: 'Location selected',
+          description: `Selected location: ${place.formatted_address}`,
+          status: 'success',
+          duration: 3000,
+          isClosable: true
+        });
       }
-    } catch (error) {
-      console.error('Error searching location:', error);
-      toast({
-        title: 'Location search error',
-        description: 'Unable to search for locations. Please try again.',
-        status: 'error',
-        duration: 3000,
-        isClosable: true
-      });
     }
   };
 
-  const handleLocationSelect = (location) => {
-    setPrefs(p => ({
-      ...p,
-      location: {
-        type: 'Point',
-        coordinates: location.coordinates,
-        address: location.address,
-        useProfileLocation: false
-      }
-    }));
-    setSearchTerm(location.address);
-    setShowSuggestions(false);
-  };
-
+  // Get current location using Google's Geocoding API
   const getCurrentLocation = () => {
     setLoadingLocation(true);
     
     if (navigator.geolocation) {
+      const geoOptions = {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      };
+
       navigator.geolocation.getCurrentPosition(
         async (position) => {
           try {
             const { latitude, longitude } = position.coords;
             
-            // Using MapMyIndia Reverse Geocoding for more accurate Indian addresses
-            const response = await fetch(
-              `https://apis.mapmyindia.com/advancedmaps/v1/YOUR_API_KEY/rev_geocode?lat=${latitude}&lng=${longitude}`
+            // Use Google's Geocoding API for reverse geocoding
+            const response = await axios.get(
+              `https://maps.googleapis.com/maps/api/geocode/json?` +
+              `latlng=${latitude},${longitude}&key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}`
             );
-            const data = await response.json();
             
-            if (data.results && data.results[0]) {
-              const address = data.results[0].formatted_address;
+            if (response.data.results && response.data.results.length > 0) {
+              const result = response.data.results[0];
+              const address = result.formatted_address;
               
               setPrefs(p => ({
                 ...p,
                 location: {
                   type: 'Point',
                   coordinates: [longitude, latitude],
-                  address,
+                  address: address,
                   useProfileLocation: false
                 }
               }));
@@ -106,13 +108,11 @@ const CricketPartnerPreferenceForm = ({ onSearch }) => {
               
               toast({
                 title: 'Location detected',
-                description: `Search location: ${address}`,
+                description: `Location: ${address}`,
                 status: 'success',
                 duration: 3000,
                 isClosable: true
               });
-            } else {
-              throw new Error('No address found');
             }
           } catch (error) {
             console.error('Error getting location address:', error);
@@ -129,20 +129,32 @@ const CricketPartnerPreferenceForm = ({ onSearch }) => {
         },
         (error) => {
           console.error('Geolocation error:', error);
+          let errorMessage = 'Unable to get your location. ';
+          
+          switch(error.code) {
+            case error.PERMISSION_DENIED:
+              errorMessage += 'Please enable location services in your browser.';
+              break;
+            case error.POSITION_UNAVAILABLE:
+              errorMessage += 'Location information is unavailable.';
+              break;
+            case error.TIMEOUT:
+              errorMessage += 'Location request timed out.';
+              break;
+            default:
+              errorMessage += 'Please try again or enter location manually.';
+          }
+          
           toast({
             title: 'Location error',
-            description: 'Unable to get your location. Please enable location services.',
+            description: errorMessage,
             status: 'error',
-            duration: 3000,
+            duration: 5000,
             isClosable: true
           });
           setLoadingLocation(false);
         },
-        {
-          enableHighAccuracy: true, // Request high accuracy
-          timeout: 10000, // Wait up to 10 seconds
-          maximumAge: 0 // Always get fresh location
-        }
+        geoOptions
       );
     } else {
       toast({
@@ -156,20 +168,55 @@ const CricketPartnerPreferenceForm = ({ onSearch }) => {
     }
   };
 
-  // Debounce search to avoid too many API calls
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (searchTerm && !prefs.location.useProfileLocation) {
-        searchLocation(searchTerm);
-      }
-    }, 500);
-
-    return () => clearTimeout(timeoutId);
-  }, [searchTerm]);
-
   const handleSubmit = (e) => {
     e.preventDefault();
+
+    // Validate location data before searching
+    if (!prefs.location.useProfileLocation) {
+      if (!prefs.location.coordinates || 
+          prefs.location.coordinates[0] === 0 || 
+          prefs.location.coordinates[1] === 0) {
+        toast({
+          title: 'Location required',
+          description: 'Please select a location from the suggestions or use your profile location',
+          status: 'error',
+          duration: 5000,
+          isClosable: true
+        });
+        return;
+      }
+    }
+
+    // Log the search preferences for debugging
+    console.log('Searching with preferences:', {
+      ...prefs,
+      location: {
+        ...prefs.location,
+        coordinates: prefs.location.coordinates
+      }
+    });
+
     onSearch(prefs);
+  };
+
+  // Update the checkbox handler to properly reset location when switching
+  const handleUseProfileLocationChange = (e) => {
+    const useProfile = e.target.checked;
+    setPrefs(p => ({
+      ...p,
+      location: {
+        ...p.location,
+        useProfileLocation: useProfile,
+        // Reset coordinates and address if not using profile location
+        ...(useProfile ? {} : {
+          coordinates: [0, 0],
+          address: ''
+        })
+      }
+    }));
+    if (!useProfile) {
+      setSearchTerm('');
+    }
   };
 
   return (
@@ -183,21 +230,20 @@ const CricketPartnerPreferenceForm = ({ onSearch }) => {
           <Checkbox
             mb={2}
             isChecked={prefs.location.useProfileLocation}
-            onChange={(e) => {
-              setPrefs(p => ({
-                ...p,
-                location: {
-                  ...p.location,
-                  useProfileLocation: e.target.checked
-                }
-              }));
-              setShowSuggestions(false);
-            }}
+            onChange={handleUseProfileLocationChange}
           >
             Use my profile location
           </Checkbox>
           {!prefs.location.useProfileLocation && (
-            <Box position="relative">
+            <LoadScript
+              googleMapsApiKey={process.env.REACT_APP_GOOGLE_MAPS_API_KEY}
+              libraries={['places']}
+            >
+              <Autocomplete
+                onLoad={onLoad}
+                onPlaceChanged={onPlaceChanged}
+                restrictions={{ country: 'in' }}
+              >
               <InputGroup>
                 <Input
                   value={searchTerm}
@@ -216,33 +262,8 @@ const CricketPartnerPreferenceForm = ({ onSearch }) => {
                   </Button>
                 </InputRightElement>
               </InputGroup>
-              {showSuggestions && suggestions.length > 0 && (
-                <List
-                  position="absolute"
-                  top="100%"
-                  left={0}
-                  right={0}
-                  bg="white"
-                  boxShadow="md"
-                  borderRadius="md"
-                  maxH="200px"
-                  overflowY="auto"
-                  zIndex={1000}
-                >
-                  {suggestions.map((suggestion, index) => (
-                    <ListItem
-                      key={index}
-                      p={2}
-                      cursor="pointer"
-                      _hover={{ bg: "gray.100" }}
-                      onClick={() => handleLocationSelect(suggestion)}
-                    >
-                      {suggestion.address}
-                    </ListItem>
-                  ))}
-                </List>
-              )}
-            </Box>
+              </Autocomplete>
+            </LoadScript>
           )}
         </FormControl>
 

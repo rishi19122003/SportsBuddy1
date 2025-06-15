@@ -2,6 +2,7 @@ import User from '../models/User.js';
 import Message from '../models/Message.js';
 import FriendRequest from '../models/FriendRequest.js';
 import mongoose from 'mongoose';
+import { createActivity } from './activityController.js';
 
 // Message Controllers
 export const sendMessage = async (req, res) => {
@@ -25,6 +26,15 @@ export const sendMessage = async (req, res) => {
 
     await message.populate('sender', 'name email profilePicture');
     await message.populate('recipient', 'name email profilePicture');
+
+    // Track message activity
+    await createActivity(
+      req.user._id,
+      'profile',
+      'Sent message',
+      `Sent a message to ${recipient.name}`,
+      [recipient._id]
+    );
 
     res.status(201).json(message);
   } catch (error) {
@@ -167,6 +177,15 @@ export const sendFriendRequest = async (req, res) => {
       // Don't return here, we can still send the unpopulated request
     }
 
+    // Track friend request activity
+    await createActivity(
+      req.user._id,
+      'social',
+      'Sent friend request',
+      `Sent friend request to ${recipient.name}`,
+      [recipient._id]
+    );
+
     console.log('Friend request created successfully:', request);
     res.status(201).json(request);
   } catch (error) {
@@ -214,6 +233,15 @@ export const respondToFriendRequest = async (req, res) => {
       await User.findByIdAndUpdate(request.recipient, {
         $addToSet: { friends: request.sender }
       });
+
+      // Track accept friend request activity
+      await createActivity(
+        req.user._id,
+        'social',
+        'Accepted friend request',
+        `Accepted friend request from ${request.sender.name}`,
+        [request.sender._id]
+      );
     }
 
     // Populate the response

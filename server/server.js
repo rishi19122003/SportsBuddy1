@@ -21,13 +21,19 @@ import cricketRoutes from './routes/cricketRoutes.js';
 import footballRoutes from './routes/footballRoutes.js';
 import socialRoutes from './routes/socialRoutes.js';
 import interactionRoutes from './routes/interactionRoutes.js';
+import activityRoutes from './routes/activityRoutes.js';
+import communityRoutes from './routes/communityRoutes.js';
+import trainingVideoRoutes from './routes/trainingVideoRoutes.js';
 
 // Initialize express
 const app = express();
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+// Increase JSON payload limit to 50mb
+app.use(express.json({ limit: '50mb' }));
+// Increase URL-encoded payload limit to 50mb
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Debug request logging middleware
 app.use((req, res, next) => {
@@ -54,7 +60,10 @@ app.use('/api/auth', authRoutes);
 app.use('/api/cricket', cricketRoutes);
 app.use('/api/football', footballRoutes);
 app.use('/api/social', socialRoutes);
+app.use('/api/training/videos', trainingVideoRoutes);
 app.use('/api/interactions', interactionRoutes);
+app.use('/api/activities', activityRoutes);
+app.use('/api/community', communityRoutes);
 
 // Basic route
 app.get('/', (req, res) => {
