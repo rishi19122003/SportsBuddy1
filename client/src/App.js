@@ -64,24 +64,16 @@ function App() {
               <Route path="/community" element={<Community />} />
             </Route>
             
-            {/* Redirect root to dashboard if authenticated, otherwise to login */}
+            {/* Root path - redirect to login if not authenticated */}
             <Route 
               path="/" 
-              element={
-                <PrivateRoute>
-                  <Navigate to="/dashboard" replace />
-                </PrivateRoute>
-              } 
+              element={<Navigate to="/login" replace />}
             />
             
-            {/* Catch all - redirect to dashboard if authenticated, otherwise to login */}
+            {/* Catch all - redirect to login */}
             <Route 
               path="*" 
-              element={
-                <PrivateRoute>
-                  <Navigate to="/dashboard" replace />
-                </PrivateRoute>
-              } 
+              element={<Navigate to="/login" replace />}
             />
           </Routes>
         </Router>
